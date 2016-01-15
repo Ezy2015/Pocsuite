@@ -7,36 +7,37 @@ See the file 'docs/COPYING' for copying permission
 """
 
 import os
-import sys
-import readline
-from lib.core.data import kb
-from lib.core.data import conf
-from lib.core.data import paths
-from lib.core.common import banner
-from lib.core.common import filepathParser
-from lib.core.option import initializeKb
-from lib.core.option import initOptions
-from lib.core.option import registerPocFromFile
-from lib.core.option import setMultipleTarget
-from lib.core.option import _setHTTPUserAgent
-from lib.core.option import _setHTTPReferer
-from lib.core.option import _setHTTPCookies
-from lib.core.option import _setHTTPProxy
-from lib.core.option import _setHTTPTimeout
-from lib.core.settings import HTTP_DEFAULT_HEADER
-from lib.core.settings import PCS_OPTIONS
-from lib.controller.check import pocViolation
-from lib.controller.setpoc import setPocFile
-from lib.controller.controller import start
-from thirdparty.cmd2.cmd2 import Cmd
-from thirdparty.oset.pyoset import oset
-from thirdparty.prettytable.prettytable import PrettyTable
+from pocsuite.lib.core.data import kb
+from pocsuite.lib.core.data import conf
+from pocsuite.lib.core.data import paths
+from pocsuite.lib.core.common import banner
+from pocsuite.lib.core.settings import IS_WIN
+from pocsuite.lib.core.common import filepathParser
+from pocsuite.lib.core.option import initializeKb
+from pocsuite.lib.core.option import registerPocFromDict
+from pocsuite.lib.core.option import setMultipleTarget
+from pocsuite.lib.core.option import _setHTTPUserAgent
+from pocsuite.lib.core.option import _setHTTPReferer
+from pocsuite.lib.core.option import _setHTTPCookies
+from pocsuite.lib.core.option import _setHTTPProxy
+from pocsuite.lib.core.option import _setHTTPTimeout
+from pocsuite.lib.core.settings import HTTP_DEFAULT_HEADER
+from pocsuite.lib.controller.check import pocViolation
+from pocsuite.lib.controller.setpoc import setPoc
+from pocsuite.lib.controller.controller import start
+from pocsuite.thirdparty.cmd2.cmd2 import Cmd
+from pocsuite.thirdparty.oset.pyoset import oset
+from pocsuite.thirdparty.prettytable.prettytable import PrettyTable
+from pocsuite.thirdparty.colorama.initialise import init as coloramainit
 
-
-if "libedit" in readline.__doc__:
-    readline.parse_and_bind("bind ^I rl_complete")
-else:
-    readline.parse_and_bind("tab: complete")
+try:
+    import readline
+    if "libedit" in readline.__doc__:
+        readline.parse_and_bind("bind ^I rl_complete")
+    else:
+        readline.parse_and_bind("tab: complete")
+except:
+    pass
 
 
 def initializePoc(folders):
@@ -45,6 +46,8 @@ def initializePoc(folders):
     # Usage: pcs-console.py modules/wordpress tests
     # 调用方式如上时可以将modules/wordpress 和 tests两个文件夹下的poc导入
     pocNumber = 0
+    if not os.path.isdir(paths.POCSUITE_MODULES_PATH):
+        os.makedirs(paths.POCSUITE_MODULES_PATH)
     folders.append(paths.POCSUITE_MODULES_PATH)
     for folder in folders:
         files = os.listdir(folder)
@@ -62,7 +65,7 @@ def avaliable():
     for k, v in kb.unloadedList.iteritems():
         path, name = filepathParser(v)
         graph.add_row([k, name, os.path.relpath(path, paths.POCSUITE_ROOT_PATH)])
-        
+
     print graph
     print
 
@@ -70,6 +73,8 @@ def avaliable():
 class baseConsole(Cmd):
 
     def __init__(self):
+        if IS_WIN:
+            coloramainit()
         Cmd.__init__(self)
         os.system("clear")
         banner()
@@ -89,7 +94,7 @@ class baseConsole(Cmd):
         conf.threads = 1
         conf.timeout = 5
         conf.httpHeaders = HTTP_DEFAULT_HEADER
-        
+
     def do_verify(self, args):
         conf.mode = 'verify'
         self._execute()
@@ -106,7 +111,7 @@ class baseConsole(Cmd):
         _setHTTPCookies()
         _setHTTPTimeout()
 
-        registerPocFromFile()
+        registerPocFromDict()
         pocViolation()
 
         setMultipleTarget()
@@ -143,7 +148,7 @@ class baseConsole(Cmd):
 
 
 class configConsole(Cmd):
-    
+
     def __init__(self):
         Cmd.__init__(self)
         self.prompt = "Pcs.config> "
@@ -192,7 +197,7 @@ class configConsole(Cmd):
         graph = PrettyTable(["config", "value"])
         graph.align["config"] = "l"
 
-        for k,v  in conf.iteritems():
+        for k, v in conf.iteritems():
             if v and k != 'httpHeaders':
                 graph.add_row([k, v])
         print graph
@@ -205,7 +210,7 @@ class configConsole(Cmd):
             print "   url          : set target url from stdin. "
             print "   urlFile      : set target url from urlFile. "
             print "   q            : return upper level. "
-            print 
+            print
             print "[Option]"
             print "   header       : set http headers for follow requests."
             print "   proxy        : set proxy. format: '(http|https|socks4|socks5)://address:port'."
@@ -234,13 +239,13 @@ class headerConsole(Cmd):
             print "   q            : return upper level. "
             print
         pass
-    
+
     def do_cookie(self, args):
         if not args:
             conf.cookie = raw_input('Pcs.config.header.cookie> ')
         else:
             conf.cookie = str(args)
-    
+
     def do_referer(self, args):
         if not args:
             conf.referer = raw_input('Pcs.config.header.referer> ')
@@ -275,7 +280,7 @@ class pocConsole(Cmd):
             print "   unload       : list all unload poc files(s)."
             print "   clear        : unload all loaded poc file(s)."
             print "   q            : return upper level. "
-            print 
+            print
 
             pass
         else:
@@ -287,18 +292,19 @@ class pocConsole(Cmd):
     def do_load(self, args):
         if args.isdigit():
             conf.pocFile = kb.unloadedList[int(args)]
+            del kb.unloadedList[int(args)]
             pass
         else:
             conf.pocFile = args
-            
-        setPocFile()
+
+        setPoc()
 
         print '[*] load poc file(s) success!'
         print
         pass
 
     def do_loaded(self, args):
-        registerPocFromFile()
+        registerPocFromDict()
 
         graph = PrettyTable(["pocId", "loadedPocsName"])
         graph.align["LoadedPocsName"] = "m"
